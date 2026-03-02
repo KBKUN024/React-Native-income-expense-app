@@ -5,8 +5,14 @@ import { GloablStyles } from "../constants/styles";
 import ExpensesContext from "../store/expenses-context";
 import { useContext } from "react";
 import { ExpenseForm } from "../components/ManageExpense/ExpenseForm";
+import { storeExpense, deleteExpense, updateExpense } from "../utils/http";
+import { useState } from "react";
+import { Spinner } from "../components/ui/Spinner";
+import { ErrorOverlay } from "../components/ui/ErrorOverlay";
 
 export function ManageExpenses({ route, navigation }) {
+  const [isFetching, setIsFetching] = useState(false);
+  const [error, setError] = useState();
   const expenseId = route.params?.expenseId;
   const isEditing = !!expenseId;
 
@@ -21,21 +27,52 @@ export function ManageExpenses({ route, navigation }) {
     });
   }, [navigation, isEditing]);
 
-  function deleteExpenseHandler() {
-    expenseCtx.deleteExpense(expenseId);
-    navigation.goBack();
+  async function deleteExpenseHandler() {
+    setIsFetching(true);
+    try {
+      await deleteExpense(expenseId);
+      expenseCtx.deleteExpense(expenseId);
+      navigation.goBack();
+    } catch (error) {
+      setError("Could not delete expense!");
+    } finally {
+      setIsFetching(false);
+    }
   }
+
   function cancelHandler() {
     navigation.goBack();
   }
-  function confirmHandler(expenseData) {
-    if (isEditing) {
-      expenseCtx.updateExpense(expenseId, expenseData);
-    } else {
-      expenseCtx.addExpense(expenseData);
+  async function confirmHandler(expenseData) {
+    setIsFetching(true);
+    try {
+      if (isEditing) {
+        await updateExpense(expenseId, expenseData);
+        expenseCtx.updateExpense(expenseId, expenseData);
+      } else {
+        const id = await storeExpense(expenseData);
+        expenseCtx.addExpense({ ...expenseData, id: id });
+      }
+      navigation.goBack();
+    } catch (error) {
+      setError("Could not save expense!");
+    } finally {
+      setIsFetching(false);
     }
-    navigation.goBack();
   }
+
+  function errorHandler() {
+    setError(null);
+  }
+
+  if (isFetching) {
+    return <Spinner />;
+  }
+
+  if (error && !isFetching) {
+    return <ErrorOverlay message={error} onConfirm={errorHandler} />;
+  }
+
   return (
     <View style={styles.container}>
       <ExpenseForm
